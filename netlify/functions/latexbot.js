@@ -44,9 +44,7 @@ exports.handler = async (event) => {
 \\usepackage[utf8]{inputenc}
 \\pagestyle{empty}
 \\begin{document}
-\\[
 ${latexCode}
-\\]
 \\end{document}
 `;
 
