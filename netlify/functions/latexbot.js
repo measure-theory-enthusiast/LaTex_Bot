@@ -41,7 +41,7 @@ ${latexCode}
 \\end{document}
 `;
 
-    const apiResponse = await fetch('https://latex.ytotech.com/builds/sync', {
+    const response = await fetch('https://latex.ytotech.com/builds/sync', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json'
