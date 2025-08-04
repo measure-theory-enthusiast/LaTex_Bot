@@ -41,11 +41,21 @@ ${latexCode}
 \\end{document}
 `;
 
-    const response = await fetch('https://latexonline.cc/data', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: tex }),
-    });
+    const apiResponse = await fetch('https://latex.ytotech.com/builds/sync', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    compiler: 'pdflatex',
+    resources: [
+      {
+        main: true,
+        content: latexCode,
+      },
+    ]
+  })
+});
 
     const pdfBuffer = await response.buffer();
 
