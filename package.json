@@ -1,0 +1,7 @@
+{
+  "name": "latexbot-api",
+  "dependencies": {
+    "nodemailer": "^6.9.0",
+    "node-fetch": "^2.6.7"
+  }
+}
