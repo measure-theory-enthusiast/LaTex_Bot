@@ -1,5 +1,5 @@
 {
-  "name": "latexbot",
+  "name": "latexbot-api",
   "version": "1.0.0",
   "dependencies": {
     "@netlify/blobs": "^1.0.0",
