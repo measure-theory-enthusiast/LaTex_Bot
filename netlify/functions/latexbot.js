@@ -13,7 +13,6 @@ const headers = {
 };
 
 // Initialize Google Sheets API client
-const privateKeyRaw = process.env.GOOGLE_PRIVATE_KEY || '';
 function getSheetsClient() {
   const creds = {
     type: 'service_account',
