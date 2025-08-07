@@ -3,7 +3,10 @@ const fetch = require('node-fetch');
 const { google } = require('googleapis');
 
 // Email sending limit per day
-const EMAIL_LIMIT = 150;
+const EMAIL_LIMIT = parseInt(process.env.EMAIL_LIMIT || '150', 10);
+if (isNaN(EMAIL_LIMIT) || EMAIL_LIMIT < 1) {
+  throw new Error('Invalid EMAIL_LIMIT value in environment variables');
+}
 
 // Google Sheets config - environment variables you must set:
 // GOOGLE_PROJECT_ID
