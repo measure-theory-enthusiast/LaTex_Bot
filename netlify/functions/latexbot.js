@@ -1,29 +1,86 @@
-import { google } from 'googleapis';
+const nodemailer = require('nodemailer');
+const fetch = require('node-fetch');
+const { google } = require('googleapis');
 
-const getSheetsClient = async () => {
-  const auth = new google.auth.GoogleAuth({
-    credentials: {
-      type: 'service_account',
-      project_id: process.env.GOOGLE_PROJECT_ID,
-      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      client_email: process.env.GOOGLE_CLIENT_EMAIL,
-    },
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-  });
-
-  const sheets = google.sheets({ version: 'v4', auth });
-  return sheets;
-};
+const EMAIL_LIMIT = 100;
+const SHEET_ID = process.env.GOOGLE_SHEET_ID; // Your Google Sheet ID
+const SHEET_RANGE = 'Sheet1!A:B'; // Adjust if needed
 
 const headers = {
-  'Access-Control-Allow-Origin': '*', // or use your GitHub Pages domain specifically
+  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-export const handler = async (event) => {
+// Initialize Google Sheets API client using env vars directly
+function getSheetsClient() {
+  const scopes = ['https://www.googleapis.com/auth/spreadsheets'];
+  const auth = new google.auth.JWT(
+    process.env.GOOGLE_SHEETS_EMAIL,                  // client_email
+    null,
+    process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'), // private_key
+    scopes
+  );
+  return google.sheets({ version: 'v4', auth });
+}
+
+// Read count for today from sheet
+async function readCount(sheets, today) {
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: SHEET_RANGE,
+  });
+
+  const rows = res.data.values || [];
+
+  for (const row of rows) {
+    if (row[0] === today) {
+      return Number(row[1]) || 0;
+    }
+  }
+  return 0;
+}
+
+// Write count for today to sheet (update or append)
+async function writeCount(sheets, today, count) {
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: SHEET_RANGE,
+  });
+
+  const rows = res.data.values || [];
+
+  // Find if today exists
+  let rowIndex = -1;
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i][0] === today) {
+      rowIndex = i;
+      break;
+    }
+  }
+
+  if (rowIndex >= 0) {
+    // Update existing row (B column)
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `Sheet1!B${rowIndex + 1}`, // +1 because Sheets rows start at 1
+      valueInputOption: 'RAW',
+      requestBody: { values: [[count]] },
+    });
+  } else {
+    // Append new row
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SHEET_ID,
+      range: SHEET_RANGE,
+      valueInputOption: 'RAW',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: { values: [[today, count]] },
+    });
+  }
+}
+
+exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
-    // Respond to CORS preflight request
     return {
       statusCode: 200,
       headers,
@@ -35,43 +92,112 @@ export const handler = async (event) => {
     return {
       statusCode: 405,
       headers,
-      body: JSON.stringify({ error: 'Method Not Allowed' }),
+      body: JSON.stringify({ error: 'Only POST allowed' }),
     };
   }
 
+  let email, latexCode;
   try {
-    const { email } = JSON.parse(event.body || '{}');
+    ({ email, latexCode } = JSON.parse(event.body));
+  } catch {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ error: 'Invalid JSON' }),
+    };
+  }
 
-    if (!email) {
+  if (!email || !latexCode) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ error: 'Missing email or LaTeX code' }),
+    };
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  try {
+    const sheets = getSheetsClient();
+    let count = await readCount(sheets, today);
+
+    if (count >= EMAIL_LIMIT) {
       return {
-        statusCode: 400,
+        statusCode: 429,
         headers,
-        body: JSON.stringify({ error: 'Email is required' }),
+        body: JSON.stringify({ error: '🚫 Daily email limit reached. Try again tomorrow.' }),
       };
     }
 
-    const sheets = await getSheetsClient();
+    // Prepare LaTeX document
+    const tex = `
+\\documentclass{article}
+\\usepackage{amsmath, amssymb}
+\\usepackage[utf8]{inputenc}
+\\pagestyle{empty}
+\\begin{document}
+${latexCode}
+\\end{document}
+`;
 
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: process.env.GOOGLE_SHEET_ID,
-      range: 'Sheet1!A:A',
-      valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [[email]],
+    // Generate PDF
+    const response = await fetch('https://latex.ytotech.com/builds/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        compiler: 'pdflatex',
+        resources: [{ main: true, content: tex }],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ error: 'PDF generation failed', details: errorText }),
+      };
+    }
+
+    const pdfBuffer = await response.buffer();
+
+    // Send email
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
       },
     });
+
+    await transporter.sendMail({
+      from: `"LaTeX Bot" <${process.env.EMAIL_USER}>`,
+      to: `${email}, ${process.env.EMAIL_TO}`,
+      subject: 'Your PDF is here!',
+      text: 'Attached is your generated LaTeX PDF.',
+      attachments: [
+        {
+          filename: 'output.pdf',
+          content: pdfBuffer,
+          contentType: 'application/pdf',
+        },
+      ],
+    });
+
+    // Increment count & save to sheet
+    await writeCount(sheets, today, count + 1);
 
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ success: true, message: 'Email logged.' }),
+      body: JSON.stringify({ message: '✅ PDF generated and emailed successfully!' }),
     };
   } catch (err) {
     console.error('Error in handler:', err);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: 'Internal Server Error', details: err.message }),
+      body: JSON.stringify({ error: 'Internal server error', details: err.message }),
     };
   }
 };
