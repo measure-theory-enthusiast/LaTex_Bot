@@ -1,6 +1,8 @@
 {
-  "name": "latexbot-api",
+  "name": "latexbot",
+  "version": "1.0.0",
   "dependencies": {
+    "@netlify/blobs": "^1.0.0",
     "nodemailer": "^6.9.0",
     "node-fetch": "^2.6.7"
   }
