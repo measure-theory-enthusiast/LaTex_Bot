@@ -5,6 +5,7 @@ const { getJSON, setJSON } = require('@netlify/blobs');
 const EMAIL_LIMIT = 150;
 const BLOB_KEY = 'daily-email-counter';
 
+// Change '*' to your frontend domain for better security if you want
 const headers = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type',
@@ -26,7 +27,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 405,
       headers,
-      body: 'Only POST allowed',
+      body: JSON.stringify({ error: 'Only POST allowed' }),
     };
   }
 
@@ -53,7 +54,7 @@ exports.handler = async (event) => {
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   const counter = (await getJSON(BLOB_KEY)) || {};
 
-  // 🧼 Clean up old entries
+  // Clean up old entries
   for (const date in counter) {
     const age = (new Date(today) - new Date(date)) / (1000 * 60 * 60 * 24);
     if (age > 7) delete counter[date];
@@ -68,7 +69,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    // 🔧 Wrap LaTeX
+    // Wrap LaTeX code
     const tex = `
 \\documentclass{article}
 \\usepackage{amsmath, amssymb}
@@ -79,7 +80,7 @@ ${latexCode}
 \\end{document}
 `;
 
-    // 🧾 Send LaTeX to the PDF conversion API
+    // Send LaTeX to PDF conversion API
     const response = await fetch('https://latex.ytotech.com/builds/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -100,7 +101,7 @@ ${latexCode}
 
     const pdfBuffer = await response.buffer();
 
-    // 📬 Send the email
+    // Send the email
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
@@ -123,7 +124,7 @@ ${latexCode}
       ],
     });
 
-    // ✅ Increment the counter and store
+    // Increment the counter and store
     counter[today] = (counter[today] || 0) + 1;
     await setJSON(BLOB_KEY, counter);
 
@@ -132,7 +133,6 @@ ${latexCode}
       headers,
       body: JSON.stringify({ message: '✅ PDF generated and emailed successfully!' }),
     };
-
   } catch (err) {
     console.error('Error sending email:', err);
     return {
