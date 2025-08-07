@@ -15,10 +15,26 @@ const getSheetsClient = async () => {
   return sheets;
 };
 
+const headers = {
+  'Access-Control-Allow-Origin': '*', // or use your GitHub Pages domain specifically
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 export const handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') {
+    // Respond to CORS preflight request
+    return {
+      statusCode: 200,
+      headers,
+      body: 'OK',
+    };
+  }
+
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
+      headers,
       body: JSON.stringify({ error: 'Method Not Allowed' }),
     };
   }
@@ -29,16 +45,16 @@ export const handler = async (event) => {
     if (!email) {
       return {
         statusCode: 400,
+        headers,
         body: JSON.stringify({ error: 'Email is required' }),
       };
     }
 
     const sheets = await getSheetsClient();
 
-    // Append the email to the Google Sheet
     await sheets.spreadsheets.values.append({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
-      range: 'Sheet1!A:A', // Adjust as needed
+      range: 'Sheet1!A:A',
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [[email]],
@@ -47,12 +63,14 @@ export const handler = async (event) => {
 
     return {
       statusCode: 200,
+      headers,
       body: JSON.stringify({ success: true, message: 'Email logged.' }),
     };
   } catch (err) {
     console.error('Error in handler:', err);
     return {
       statusCode: 500,
+      headers,
       body: JSON.stringify({ error: 'Internal Server Error', details: err.message }),
     };
   }
