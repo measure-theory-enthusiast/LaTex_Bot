@@ -1,10 +1,17 @@
 {
   "name": "latexbot",
   "version": "1.0.0",
-  "main": "latexbot.js",
+  "description": "Serverless LaTeX-to-PDF email bot using Netlify and Google Sheets",
+  "main": "netlify/functions/latexbot.js",
+  "scripts": {
+    "start": "netlify dev",
+    "build": "echo 'No build step required'"
+  },
   "dependencies": {
-    "@netlify/blobs": "^1.0.0",
+    "googleapis": "^118.0.0",
     "node-fetch": "^2.6.7",
-    "nodemailer": "^6.9.1"
-  }
+    "nodemailer": "^6.9.8"
+  },
+  "type": "commonjs",
+  "license": "MIT"
 }
