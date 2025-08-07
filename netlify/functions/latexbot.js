@@ -17,7 +17,9 @@ function getSheetsClient() {
   const creds = {
     type: 'service_account',
     project_id: process.env.GOOGLE_PROJECT_ID,
-    private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    const privateKeyRaw = process.env.GOOGLE_PRIVATE_KEY || '';
+    const privateKey = privateKeyRaw.replace(/\\n/g, '\n').trim();
+    console.log("Private key preview:", privateKey;
     client_email: process.env.GOOGLE_SHEETS_EMAIL,
   };
 
@@ -25,9 +27,6 @@ function getSheetsClient() {
   const auth = new google.auth.JWT(creds.client_email, null, creds.private_key, scopes);
   return google.sheets({ version: 'v4', auth });
 }
-
-console.log("Private key preview:", process.env.GOOGLE_PRIVATE_KEY.slice(0, 50));
-console.log("Processed key preview:", process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n').slice(0, 50));
 
 // Read count for today from sheet
 async function readCount(sheets, today) {
