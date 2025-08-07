@@ -13,11 +13,11 @@ const headers = {
 };
 
 // Initialize Google Sheets API client
+const privateKeyRaw = process.env.GOOGLE_PRIVATE_KEY || '';
 function getSheetsClient() {
   const creds = {
     type: 'service_account',
     project_id: process.env.GOOGLE_PROJECT_ID,
-    const privateKeyRaw = process.env.GOOGLE_PRIVATE_KEY || '';
     const privateKey = privateKeyRaw.replace(/\\n/g, '\n').trim();
     console.log("Private key preview:", privateKey;
     client_email: process.env.GOOGLE_SHEETS_EMAIL,
