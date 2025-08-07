@@ -18,9 +18,8 @@ exports.handler = async (event) => {
     // Dynamically import @netlify/blobs ESM module once
     if (!getJSON || !setJSON) {
       const blobsModule = await import('@netlify/blobs');
-      const blobs = blobsModule.default || blobsModule;
-      getJSON = blobs.getJSON;
-      setJSON = blobs.setJSON;
+      getJSON = blobsModule.getJSON;
+      setJSON = blobsModule.setJSON;
     }
 
     // Handle preflight CORS
