@@ -5,17 +5,16 @@ const EMAIL_LIMIT = 100;
 const BLOB_KEY = 'daily-email-counter';
 
 const headers = {
-  'Access-Control-Allow-Origin': '*', // replace '*' with your frontend origin for security
+  'Access-Control-Allow-Origin': '*', // Change '*' to your frontend domain for security
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 exports.handler = async (event) => {
-  // Dynamic import of ES module @netlify/blobs
-  const { getJSON, setJSON } = await import('@netlify/blobs');
+  // Correct dynamic import with default extraction
+  const { getJSON, setJSON } = (await import('@netlify/blobs')).default;
 
   try {
-    // Handle preflight CORS
     if (event.httpMethod === 'OPTIONS') {
       return {
         statusCode: 200,
@@ -53,13 +52,12 @@ exports.handler = async (event) => {
 
     const today = new Date().toISOString().slice(0, 10);
 
-    // Load or initialize counter blob
     let counter;
     try {
       counter = await getJSON(BLOB_KEY);
       if (typeof counter !== 'object' || counter === null) counter = {};
     } catch {
-      // Blob doesn't exist, create empty
+      // Blob doesn't exist yet
       counter = {};
       await setJSON(BLOB_KEY, counter);
     }
@@ -78,7 +76,6 @@ exports.handler = async (event) => {
       };
     }
 
-    // Prepare LaTeX source
     const tex = `
 \\documentclass{article}
 \\usepackage{amsmath, amssymb}
@@ -89,7 +86,6 @@ ${latexCode}
 \\end{document}
 `;
 
-    // Convert LaTeX to PDF via ytotech API
     const response = await fetch('https://latex.ytotech.com/builds/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -110,7 +106,6 @@ ${latexCode}
 
     const pdfBuffer = await response.buffer();
 
-    // Send email with PDF attachment
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
@@ -133,7 +128,6 @@ ${latexCode}
       ],
     });
 
-    // Increment counter and save
     counter[today] = (counter[today] || 0) + 1;
     await setJSON(BLOB_KEY, counter);
 
