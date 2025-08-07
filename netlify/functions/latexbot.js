@@ -1,39 +1,21 @@
 const nodemailer = require('nodemailer');
 const fetch = require('node-fetch');
-const { getJSON, setJSON } = require('@netlify/blobs');
 
 const EMAIL_LIMIT = 100;
 const BLOB_KEY = 'daily-email-counter';
 
 const headers = {
-  'Access-Control-Allow-Origin': '*', // change '*' to your frontend domain for better security
+  'Access-Control-Allow-Origin': '*', // replace '*' with your frontend origin for security
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-// Helper to get counter or initialize empty object if missing
-async function getCounter() {
-  try {
-    const data = await getJSON(BLOB_KEY);
-    if (typeof data === 'object' && data !== null) {
-      return data;
-    }
-    return {};
-  } catch (e) {
-    // Blob missing or corrupt -> create it
-    try {
-      await setJSON(BLOB_KEY, {}); // create empty blob
-      return {};
-    } catch (err) {
-      console.error('Failed to create initial counter blob:', err);
-      throw err;
-    }
-  }
-}
-
 exports.handler = async (event) => {
+  // Dynamic import of ES module @netlify/blobs
+  const { getJSON, setJSON } = await import('@netlify/blobs');
+
   try {
-    // Handle CORS preflight
+    // Handle preflight CORS
     if (event.httpMethod === 'OPTIONS') {
       return {
         statusCode: 200,
@@ -71,10 +53,18 @@ exports.handler = async (event) => {
 
     const today = new Date().toISOString().slice(0, 10);
 
-    // Get or create the email counter
-    const counter = await getCounter();
+    // Load or initialize counter blob
+    let counter;
+    try {
+      counter = await getJSON(BLOB_KEY);
+      if (typeof counter !== 'object' || counter === null) counter = {};
+    } catch {
+      // Blob doesn't exist, create empty
+      counter = {};
+      await setJSON(BLOB_KEY, counter);
+    }
 
-    // Cleanup old entries (>7 days)
+    // Remove entries older than 7 days
     for (const date in counter) {
       const age = (new Date(today) - new Date(date)) / (1000 * 60 * 60 * 24);
       if (age > 7) delete counter[date];
@@ -99,7 +89,7 @@ ${latexCode}
 \\end{document}
 `;
 
-    // Convert LaTeX to PDF
+    // Convert LaTeX to PDF via ytotech API
     const response = await fetch('https://latex.ytotech.com/builds/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -143,14 +133,9 @@ ${latexCode}
       ],
     });
 
-    // Increment and save counter
+    // Increment counter and save
     counter[today] = (counter[today] || 0) + 1;
-    try {
-      await setJSON(BLOB_KEY, counter);
-    } catch (e) {
-      console.error('Failed to save email counter:', e);
-      // Optional: continue anyway
-    }
+    await setJSON(BLOB_KEY, counter);
 
     return {
       statusCode: 200,
