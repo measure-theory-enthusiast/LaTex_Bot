@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const fetch = require('node-fetch');
+const { getJSON, setJSON } = require('@netlify/blobs');  // Static import at top
 
 const EMAIL_LIMIT = 150;
 const BLOB_KEY = 'daily-email-counter';
@@ -11,17 +12,8 @@ const headers = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-let getJSON, setJSON;
-
 exports.handler = async (event) => {
   try {
-    // Dynamically import @netlify/blobs ESM module once
-    if (!getJSON || !setJSON) {
-      const blobsModule = await import('@netlify/blobs');
-      getJSON = blobsModule.getJSON;
-      setJSON = blobsModule.setJSON;
-    }
-
     // Handle preflight CORS
     if (event.httpMethod === 'OPTIONS') {
       return {
