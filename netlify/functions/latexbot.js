@@ -4,6 +4,7 @@ const fetch = require('node-fetch');
 const EMAIL_LIMIT = 150;
 const BLOB_KEY = 'daily-email-counter';
 
+// Change '*' to your frontend domain for better security if you want
 const headers = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type',
@@ -14,13 +15,15 @@ let getJSON, setJSON;
 
 exports.handler = async (event) => {
   try {
-    // Dynamic import
+    // Dynamically import @netlify/blobs ESM module once
     if (!getJSON || !setJSON) {
-      const blobs = await import('@netlify/blobs');
+      const blobsModule = await import('@netlify/blobs');
+      const blobs = blobsModule.default || blobsModule;
       getJSON = blobs.getJSON;
       setJSON = blobs.setJSON;
     }
 
+    // Handle preflight CORS
     if (event.httpMethod === 'OPTIONS') {
       return {
         statusCode: 200,
@@ -29,6 +32,7 @@ exports.handler = async (event) => {
       };
     }
 
+    // Only allow POST requests
     if (event.httpMethod !== 'POST') {
       return {
         statusCode: 405,
@@ -37,7 +41,7 @@ exports.handler = async (event) => {
       };
     }
 
-    // Parse input
+    // Parse and validate input
     let email, latexCode;
     try {
       ({ email, latexCode } = JSON.parse(event.body));
@@ -57,10 +61,10 @@ exports.handler = async (event) => {
       };
     }
 
-    // Email limit and cleanup
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
     const counter = (await getJSON(BLOB_KEY)) || {};
 
+    // Clean up old entries
     for (const date in counter) {
       const age = (new Date(today) - new Date(date)) / (1000 * 60 * 60 * 24);
       if (age > 7) delete counter[date];
@@ -74,7 +78,7 @@ exports.handler = async (event) => {
       };
     }
 
-    // Generate LaTeX pdf
+    // Wrap LaTeX code
     const tex = `
 \\documentclass{article}
 \\usepackage{amsmath, amssymb}
@@ -85,6 +89,7 @@ ${latexCode}
 \\end{document}
 `;
 
+    // Send LaTeX to PDF conversion API
     const response = await fetch('https://latex.ytotech.com/builds/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -105,7 +110,7 @@ ${latexCode}
 
     const pdfBuffer = await response.buffer();
 
-    // Send email
+    // Send the email
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
@@ -128,7 +133,7 @@ ${latexCode}
       ],
     });
 
-    // Update counter
+    // Increment the counter and store
     counter[today] = (counter[today] || 0) + 1;
     await setJSON(BLOB_KEY, counter);
 
@@ -137,12 +142,11 @@ ${latexCode}
       headers,
       body: JSON.stringify({ message: '✅ PDF generated and emailed successfully!' }),
     };
-
   } catch (err) {
-    console.error('Unhandled error:', err);
+    console.error('Error in handler:', err);
     return {
       statusCode: 500,
-      headers,  // IMPORTANT: send CORS headers here too
+      headers,
       body: JSON.stringify({ error: 'Internal server error', details: err.message }),
     };
   }
