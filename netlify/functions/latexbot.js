@@ -26,6 +26,9 @@ function getSheetsClient() {
   return google.sheets({ version: 'v4', auth });
 }
 
+console.log("Private key preview:", process.env.GOOGLE_PRIVATE_KEY.slice(0, 50));
+console.log("Processed key preview:", process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n').slice(0, 50));
+
 // Read count for today from sheet
 async function readCount(sheets, today) {
   const res = await sheets.spreadsheets.values.get({
