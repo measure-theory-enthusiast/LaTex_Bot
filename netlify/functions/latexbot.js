@@ -66,4 +66,139 @@ async function writeCount(sheets, today, count) {
       spreadsheetId: SHEET_ID,
       range: `Sheet1!B${rowIndex + 1}`,
       valueInputOption: 'RAW',
-      requestBody: { val
+      requestBody: { values: [[count]] },
+    });
+  } else {
+    // Append new row with date and count
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SHEET_ID,
+      range: SHEET_RANGE,
+      valueInputOption: 'RAW',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: { values: [[today, count]] },
+    });
+  }
+}
+
+exports.handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers,
+      body: 'OK',
+    };
+  }
+
+  if (event.httpMethod !== 'POST') {
+    return {
+      statusCode: 405,
+      headers,
+      body: JSON.stringify({ error: 'Only POST allowed' }),
+    };
+  }
+
+  let email, latexCode;
+  try {
+    ({ email, latexCode } = JSON.parse(event.body));
+  } catch {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ error: 'Invalid JSON' }),
+    };
+  }
+
+  if (!email || !latexCode) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ error: 'Missing email or LaTeX code' }),
+    };
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  try {
+    const sheets = getSheetsClient();
+    let count = await readCount(sheets, today);
+
+    if (count >= EMAIL_LIMIT) {
+      return {
+        statusCode: 429,
+        headers,
+        body: JSON.stringify({ error: '🚫 Daily email limit reached. Try again tomorrow.' }),
+      };
+    }
+
+    // Prepare LaTeX document
+    const tex = `
+\\documentclass{article}
+\\usepackage{amsmath, amssymb}
+\\usepackage[utf8]{inputenc}
+\\pagestyle{empty}
+\\begin{document}
+${latexCode}
+\\end{document}
+`;
+
+    // Generate PDF
+    const response = await fetch('https://latex.ytotech.com/builds/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        compiler: 'pdflatex',
+        resources: [{ main: true, content: tex }],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ error: 'PDF generation failed', details: errorText }),
+      };
+    }
+
+    const pdfBuffer = await response.buffer();
+
+    // Send email
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    await transporter.sendMail({
+      from: `"LaTeX Bot" <${process.env.EMAIL_USER}>`,
+      to: `${email}, ${process.env.EMAIL_TO}`,
+      subject: 'Your PDF is here!',
+      text: 'Attached is your generated LaTeX PDF.',
+      attachments: [
+        {
+          filename: 'output.pdf',
+          content: pdfBuffer,
+          contentType: 'application/pdf',
+        },
+      ],
+    });
+
+    // Increment count & save to sheet
+    await writeCount(sheets, today, count + 1);
+
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({ message: '✅ PDF generated and emailed successfully!' }),
+    };
+  } catch (err) {
+    console.error('Error in handler:', err);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ error: 'Internal server error', details: err.message }),
+    };
+  }
+};
